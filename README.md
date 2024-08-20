@@ -1,6 +1,13 @@
 # SharpNet
 SharpNet is a C# library for working with TCP network connections. It provides a straightforward way to create a TCP server, handle incoming messages, and send responses to clients. The library supports listening for messages with specific identifiers and processing these messages asynchronously.
 
+# Installation
+To install the SharpNet library, you need to use the .NET CLI to add it to your project. Use the following command to install the package:
+
+```dotnet add package SharpNet --version 1.0.0```
+
+This command will add the SharpNet package to your project, allowing you to use its classes and methods in your application.
+
 # Examples
 
 ### Server (SharpNET)
@@ -108,6 +115,7 @@ public class Program
 - **Arguments:**
   - `int port`: The port number on which the server should listen for incoming connections.
 - **Returns:** `void`
+
 **Example**:
 ```
 server.StartServer(port);
@@ -118,6 +126,7 @@ server.StartServer(port);
 - **Description:** Stops the TCP server and closes all active connections.
 - **Arguments:** None
 - **Returns:** `void`
+
 **Example**:
 ```
 server.Stop();
@@ -130,6 +139,7 @@ server.Stop();
   - `string packetId`: The identifier of the packet to listen for.
   - `Action<string, TcpClient> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments.
 - **Returns:** `void`
+
 **Example**:
 ```
 server.Listen("TESTREQUEST1337", (TcpClient client, string message) =>
@@ -147,7 +157,19 @@ server.Listen("TESTREQUEST1337", (TcpClient client, string message) =>
   - `string packetId`: The identifier to prepend to the message.
   - `string message`: The message to be sent to the client.
 - **Returns:** `Task`: A `Task` representing the asynchronous operation. This method is asynchronous and returns a `Task` to indicate completion.
+
 **Example**:
 ```
 server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
+```
+
+## Variables
+
+### `separator`
+
+- **Description:** This variable defines the character used as a separator between the packet ID and the message content. The default separator is '|', but you can change it as needed.
+
+**Example**:
+```
+server.separator = NewSeparator;
 ```
