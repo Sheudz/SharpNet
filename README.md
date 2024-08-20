@@ -155,3 +155,17 @@ server.Listen("TESTREQUEST1337", (TcpClient client, string message) =>
 ```
 server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
 ```
+
+## Variables
+
+### `separator`
+
+- **Description:** This variable defines the character used as a separator between the packet ID and the message content. The default separator is '|', but you can change it as needed.
+- **Arguments:**
+  - `char NewSeparator`: New Separator
+- **Returns:** `void`
+
+**Example**:
+```
+server.separator = NewSeparator;
+```
