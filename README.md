@@ -108,6 +108,7 @@ public class Program
 - **Arguments:**
   - `int port`: The port number on which the server should listen for incoming connections.
 - **Returns:** `void`
+
 **Example**:
 ```
 server.StartServer(port);
@@ -118,6 +119,7 @@ server.StartServer(port);
 - **Description:** Stops the TCP server and closes all active connections.
 - **Arguments:** None
 - **Returns:** `void`
+
 **Example**:
 ```
 server.Stop();
@@ -130,6 +132,7 @@ server.Stop();
   - `string packetId`: The identifier of the packet to listen for.
   - `Action<string, TcpClient> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments.
 - **Returns:** `void`
+
 **Example**:
 ```
 server.Listen("TESTREQUEST1337", (TcpClient client, string message) =>
@@ -147,6 +150,7 @@ server.Listen("TESTREQUEST1337", (TcpClient client, string message) =>
   - `string packetId`: The identifier to prepend to the message.
   - `string message`: The message to be sent to the client.
 - **Returns:** `Task`: A `Task` representing the asynchronous operation. This method is asynchronous and returns a `Task` to indicate completion.
+
 **Example**:
 ```
 server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
