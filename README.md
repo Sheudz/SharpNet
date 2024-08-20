@@ -168,9 +168,6 @@ server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
 ### `separator`
 
 - **Description:** This variable defines the character used as a separator between the packet ID and the message content. The default separator is '|', but you can change it as needed.
-- **Arguments:**
-  - `char NewSeparator`: New Separator
-- **Returns:** `void`
 
 **Example**:
 ```
