@@ -3,7 +3,7 @@ SharpNet is a C# library for working with TCP network connections. It provides a
 
 # Examples
 
-## Server (SharpNET)
+### Server (SharpNET)
 ```
 using System.Net.Sockets;
 
@@ -46,7 +46,7 @@ namespace Test
 }
 
 ```
-## Client (Net.Sockets)
+### Client (Net.Sockets)
 ```
 using System;
 using System.Net.Sockets;
