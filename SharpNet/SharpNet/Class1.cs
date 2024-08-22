@@ -9,7 +9,6 @@ namespace SharpNet
     {
         private TcpListener _server;
         private bool _isRunning;
-        private Thread _serverThread;
         private readonly ConcurrentDictionary<string, BlockingCollection<(TcpClient client, byte[] packet)>> _listeners;
         public char separator = '|';
 
@@ -18,7 +17,7 @@ namespace SharpNet
             _listeners = new ConcurrentDictionary<string, BlockingCollection<(TcpClient, byte[])>>();
         }
 
-        public void StartServer(int port)
+        public async void StartServer(int port)
         {
             if (_isRunning)
                 throw new InvalidOperationException("Server is already running.");
@@ -27,24 +26,19 @@ namespace SharpNet
             _server.Start();
             _isRunning = true;
 
-            _serverThread = new Thread(() =>
+            while (_isRunning)
             {
-                while (_isRunning)
+                try
                 {
-                    try
-                    {
-                        var client = _server.AcceptTcpClient();
-                        HandleClient(client);
-                    }
-                    catch (SocketException ex)
-                    {
-                        if (!_isRunning)
-                            break;
-                    }
+                    var client = await _server.AcceptTcpClientAsync();
+                    HandleClient(client);
                 }
-            });
-
-            _serverThread.Start();
+                catch (SocketException)
+                {
+                    if (!_isRunning)
+                        break;
+                }
+            }
         }
 
         public void StopServer()
@@ -54,16 +48,13 @@ namespace SharpNet
 
             _isRunning = false;
             _server.Stop();
-
-            if (_serverThread != null && _serverThread.IsAlive)
-                _serverThread.Join();
         }
 
         public void Listen(string packetid, Action<TcpClient, string> callback)
         {
             var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
 
-            Thread listenerThread = new Thread(() =>
+            Task.Run(async () =>
             {
                 foreach (var (client, packet) in queue.GetConsumingEnumerable())
                 {
@@ -71,11 +62,9 @@ namespace SharpNet
                     callback(client, message);
                 }
             });
-
-            listenerThread.Start();
         }
 
-        public void SendMessage(TcpClient client, string? packetid, string message)
+        public async Task SendMessage(TcpClient client, string? packetid, string message)
         {
             if (client == null || !client.Connected)
                 throw new InvalidOperationException("Client is not connected.");
@@ -84,16 +73,16 @@ namespace SharpNet
             if (packetid != null) { message = $"{packetid}{separator}{message}"; }
             byte[] data = Encoding.UTF8.GetBytes(message);
 
-            stream.Write(data, 0, data.Length);
+            await stream.WriteAsync(data, 0, data.Length);
         }
 
-        private void HandleClient(TcpClient client)
+        private async void HandleClient(TcpClient client)
         {
             NetworkStream stream = client.GetStream();
             byte[] buffer = new byte[1024];
             int bytesRead;
 
-            while (_isRunning && (bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+            while (_isRunning && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
             {
                 string packetid = ExtractPacketId(buffer, bytesRead);
                 if (_listeners.TryGetValue(packetid, out var queue))
