@@ -22,34 +22,38 @@ namespace Test
     {
         private static SharpNet.SharpNet server;
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            StartServer(5555);
+            await StartServerAsync(5555);
         }
-        public static void StartServer(int port)
+
+        public static async Task StartServerAsync(int port)
         {
             server = new SharpNet.SharpNet();
             server.separator = '|';
             server.StartServer(port);
-            Task.Run(Handle);
+            await HandleAsync();
         }
 
-        public static void RestartServer(int newPort)
+        public static async Task RestartServerAsync(int newPort)
         {
             if (server != null)
             {
                 server.StopServer();
             }
-            StartServer(newPort);
+            await StartServerAsync(newPort);
         }
 
-        private static async Task Handle()
+        private static async Task HandleAsync()
         {
             server.Listen("TESTREQUEST1337", async (TcpClient client, string message) =>
             {
-                server.SendMessage(client, null, $"{message}+1337"); // if you dont need to transfer a packetid
-                server.SendMessage(client, "response1337", $"{message}+1337"); // if you need to transfer a packetid
+                await server.SendMessage(client, null, $"{message}+1337"); // If you don't need to transfer a packetId
+                await server.SendMessage(client, "response1337", $"{message}+1337"); // If you need to transfer a packetId
             });
+
+            // Prevent the application from exiting immediately
+            await Task.Delay(-1); // Infinite delay
         }
     }
 }
@@ -144,11 +148,11 @@ server.Stop();
 
 **Example**:
 ```
-server.Listen("TESTREQUEST1337", (TcpClient client, string message) =>
+server.Listen("TESTREQUEST1337", async (TcpClient client, string message) =>
 {
     Console.WriteLine($"Received message: {message}");
+    await server.SendMessage(client, "response1337", $"Response to: {message}");
 });
-
 ```
 
 ### `SendMessage`
@@ -173,5 +177,5 @@ server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
 
 **Example**:
 ```
-server.separator = NewSeparator;
+await server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
 ```
