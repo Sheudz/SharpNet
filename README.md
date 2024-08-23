@@ -143,7 +143,7 @@ server.Stop();
 - **Description:** Registers a callback to be invoked when a message with a specific packet identifier is received.
 - **Arguments:**
   - `string packetid`: The identifier of the packet to listen for. null allowed
-  - `TcpClient specificClient `: The identifier of the packet to listen for. null allowed
+  - `TcpClient specificClient `: The identifier of the client to listen for. null allowed
   - `Action<TcpClient, string> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments. null allowed
 - **Returns:** `void`
 
