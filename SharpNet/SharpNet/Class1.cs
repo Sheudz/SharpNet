@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using SharpNet.Extensions;
 
 namespace SharpNet
 {
@@ -10,11 +11,18 @@ namespace SharpNet
         private TcpListener _server;
         private bool _isRunning;
         private readonly ConcurrentDictionary<string, BlockingCollection<(TcpClient client, byte[] packet)>> _listeners;
+        private readonly ConcurrentBag<BlockingCollection<(TcpClient client, byte[] packet)>> _generalListeners;
+        private readonly ConcurrentBag<TcpClient> _connectedClients;
         public char separator = '|';
+
+        public delegate void ClientDisconnectedHandler(TcpClient client);
+        public event ClientDisconnectedHandler OnDisconnect;
 
         public SharpNet()
         {
             _listeners = new ConcurrentDictionary<string, BlockingCollection<(TcpClient, byte[])>>();
+            _generalListeners = new ConcurrentBag<BlockingCollection<(TcpClient, byte[])>>();
+            _connectedClients = new ConcurrentBag<TcpClient>();
         }
 
         public async void StartServer(int port)
@@ -31,6 +39,7 @@ namespace SharpNet
                 try
                 {
                     var client = await _server.AcceptTcpClientAsync();
+                    _connectedClients.Add(client);
                     HandleClient(client);
                 }
                 catch (SocketException)
@@ -47,21 +56,53 @@ namespace SharpNet
                 throw new InvalidOperationException("Server is not running.");
 
             _isRunning = false;
+
             _server.Stop();
+
+            foreach (var client in _connectedClients)
+            {
+                if (client.Connected)
+                {
+                    client.Close();
+                }
+            }
         }
 
-        public void Listen(string packetid, Action<TcpClient, string> callback)
+        public void Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
         {
-            var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
-
-            Task.Run(async () =>
+            if (packetid == null)
             {
-                foreach (var (client, packet) in queue.GetConsumingEnumerable())
+                var queue = new BlockingCollection<(TcpClient, byte[])>();
+                _generalListeners.Add(queue);
+
+                Task.Run(async () =>
                 {
-                    string message = ExtractMessageAfterPacketId(packet);
-                    callback(client, message);
-                }
-            });
+                    foreach (var (client, packet) in queue.GetConsumingEnumerable())
+                    {
+                        if (specificClient == null || client == specificClient)
+                        {
+                            string message = Encoding.UTF8.GetString(packet);
+                            callback(client, message);
+                        }
+                    }
+                });
+            }
+            else
+            {
+                var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
+
+                Task.Run(async () =>
+                {
+                    foreach (var (client, packet) in queue.GetConsumingEnumerable())
+                    {
+                        if (specificClient == null || client == specificClient)
+                        {
+                            string message = ExtractMessageAfterPacketId(packet);
+                            callback(client, message);
+                        }
+                    }
+                });
+            }
         }
 
         public async Task SendMessage(TcpClient client, string? packetid, string message)
@@ -82,18 +123,43 @@ namespace SharpNet
             byte[] buffer = new byte[1024];
             int bytesRead;
 
-            while (_isRunning && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            try
             {
-                string packetid = ExtractPacketId(buffer, bytesRead);
-                if (_listeners.TryGetValue(packetid, out var queue))
+                while (_isRunning && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                 {
-                    byte[] packetData = new byte[bytesRead];
-                    Array.Copy(buffer, packetData, bytesRead);
-                    queue.Add((client, packetData));
+                    string packetid = null;
+                    bool isPacketIdFound = false;
+
+                    try
+                    {
+                        packetid = ExtractPacketId(buffer, bytesRead);
+                        isPacketIdFound = true;
+                    }
+                    catch (InvalidDataException){}
+
+                    if (isPacketIdFound && _listeners.TryGetValue(packetid, out var queue))
+                    {
+                        byte[] packetData = new byte[bytesRead];
+                        Array.Copy(buffer, packetData, bytesRead);
+                        queue.Add((client, packetData));
+                    }
+                    else
+                    {
+                        foreach (var generalQueue in _generalListeners)
+                        {
+                            byte[] packetData = new byte[bytesRead];
+                            Array.Copy(buffer, packetData, bytesRead);
+                            generalQueue.Add((client, packetData));
+                        }
+                    }
                 }
             }
-
-            client.Close();
+            finally
+            {
+                client.TriggerDisconnect();
+                OnDisconnect?.Invoke(client);
+                client.Close();
+            }
         }
 
         private string ExtractPacketId(byte[] buffer, int length)
