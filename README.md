@@ -5,7 +5,7 @@ SharpNet is a C# library for working with TCP network connections. It provides a
 To install the SharpNet library, you need to use the .NET CLI to add it to your project. Use the following command to install the package:
 
 ```
-dotnet add package SharpNet --version 1.0.1
+dotnet add package SharpNet --version 1.0.2
 ```
 
 This command will add the SharpNet package to your project, allowing you to use its classes and methods in your application.
@@ -46,7 +46,7 @@ namespace Test
 
         private static async Task HandleAsync()
         {
-            server.Listen("TESTREQUEST1337", async (TcpClient client, string message) =>
+            server.Listen(packetid: "TESTREQUEST1337", callback: async (client, message) =>
             {
                 await server.SendMessage(client, null, $"{message}+1337"); // If you don't need to transfer a packetId
                 await server.SendMessage(client, "response1337", $"{message}+1337"); // If you need to transfer a packetId
@@ -142,13 +142,14 @@ server.Stop();
 
 - **Description:** Registers a callback to be invoked when a message with a specific packet identifier is received.
 - **Arguments:**
-  - `string packetId`: The identifier of the packet to listen for.
-  - `Action<TcpClient, string> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments.
+  - `string packetid`: The identifier of the packet to listen for. null allowed
+  - `TcpClient specificClient `: The identifier of the packet to listen for. null allowed
+  - `Action<TcpClient, string> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments. null allowed
 - **Returns:** `void`
 
 **Example**:
 ```
-server.Listen("TESTREQUEST1337", async (TcpClient client, string message) =>
+server.Listen(packetid: "TESTREQUEST1337", specificClient: client, callback: async (client, message) =>
 {
     Console.WriteLine($"Received message: {message}");
     await server.SendMessage(client, "response1337", $"Response to: {message}");
@@ -160,7 +161,7 @@ server.Listen("TESTREQUEST1337", async (TcpClient client, string message) =>
 - **Description:** Sends a message to a specific client.
 - **Arguments:**
   - `TcpClient client`: The client to which the message will be sent.
-  - `string packetId`: The identifier to prepend to the message.
+  - `string packetId`: The identifier to prepend to the message. null allowed
   - `string message`: The message to be sent to the client.
 - **Returns:** `Task`: A `Task` representing the asynchronous operation. This method is asynchronous and returns a `Task` to indicate completion.
 
@@ -177,5 +178,41 @@ server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
 
 **Example**:
 ```
-await server.SendMessage(client, "TESTREQUEST1337", "Hello from the server");
+server.separator = '|';
+```
+
+## Handlers
+
+### OnDisconnect
+- **Description:** fires when the client disconnected
+
+**Example**:
+```
+public static async Task StartServer(int port)
+{
+    server = new SharpNet.SharpNet();
+    server.separator = '|';
+    server.StartServer(port);
+    server.OnDisconnect += ClientDisconnected;
+    await Handle();
+}
+
+private static async Task Handle()
+{
+    server.Listen(packetid: "newuser", callback: async (client, message) =>
+    {
+        client.OnDisconnect(() => ClientSpecificDisconnected(client));
+    }
+}
+
+private static void ClientDisconnected(TcpClient client)
+{
+    Console.WriteLine($"Client disconnected from server: {client}");
+}
+
+private static void ClientSpecificDisconnected(TcpClient client)
+{
+    Console.WriteLine($"Client disconnected from server: {client}");
+}
+
 ```
