@@ -25,96 +25,122 @@ namespace SharpNet
             _connectedClients = new ConcurrentBag<TcpClient>();
         }
 
-        public async void StartServer(int port)
+        public async Task<Result> StartServer(int port)
         {
             if (_isRunning)
-                throw new InvalidOperationException("Server is already running.");
+                return Result.Fail("Server is already running.");
 
-            _server = new TcpListener(IPAddress.Any, port);
-            _server.Start();
-            _isRunning = true;
-
-            while (_isRunning)
+            try
             {
-                try
+                _server = new TcpListener(IPAddress.Any, port);
+                _server.Start();
+                _isRunning = true;
+
+                while (_isRunning)
                 {
                     var client = await _server.AcceptTcpClientAsync();
                     _connectedClients.Add(client);
                     HandleClient(client);
                 }
-                catch (SocketException)
-                {
-                    if (!_isRunning)
-                        break;
-                }
+
+                return Result.Ok("Server started successfully.");
+            }
+            catch (Exception ex)
+            {
+                return Result.Fail($"Failed to start server: {ex.Message}");
             }
         }
 
-        public void StopServer()
+        public Result StopServer()
         {
             if (!_isRunning)
-                throw new InvalidOperationException("Server is not running.");
+                return Result.Fail("Server is not running.");
 
-            _isRunning = false;
-
-            _server.Stop();
-
-            foreach (var client in _connectedClients)
+            try
             {
-                if (client.Connected)
+                _isRunning = false;
+                _server.Stop();
+
+                foreach (var client in _connectedClients)
                 {
-                    client.Close();
+                    if (client.Connected)
+                    {
+                        client.Close();
+                    }
                 }
+
+                return Result.Ok("Server stopped successfully.");
+            }
+            catch (Exception ex)
+            {
+                return Result.Fail($"Failed to stop server: {ex.Message}");
             }
         }
 
-        public void Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
+        public Result Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
         {
-            if (packetid == null)
+            try
             {
-                var queue = new BlockingCollection<(TcpClient, byte[])>();
-                _generalListeners.Add(queue);
-
-                Task.Run(async () =>
+                if (packetid == null)
                 {
-                    foreach (var (client, packet) in queue.GetConsumingEnumerable())
+                    var queue = new BlockingCollection<(TcpClient, byte[])>();
+                    _generalListeners.Add(queue);
+
+                    Task.Run(() =>
                     {
-                        if (specificClient == null || client == specificClient)
+                        foreach (var (client, packet) in queue.GetConsumingEnumerable())
                         {
-                            string message = Encoding.UTF8.GetString(packet);
-                            callback(client, message);
+                            if (specificClient == null || client == specificClient)
+                            {
+                                string message = Encoding.UTF8.GetString(packet);
+                                callback(client, message);
+                            }
                         }
-                    }
-                });
+                    });
+                }
+                else
+                {
+                    var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
+
+                    Task.Run(() =>
+                    {
+                        foreach (var (client, packet) in queue.GetConsumingEnumerable())
+                        {
+                            if (specificClient == null || client == specificClient)
+                            {
+                                string message = ExtractMessageAfterPacketId(packet);
+                                callback(client, message);
+                            }
+                        }
+                    });
+                }
+
+                return Result.Ok("Listening for messages.");
             }
-            else
+            catch (Exception ex)
             {
-                var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
-
-                Task.Run(async () =>
-                {
-                    foreach (var (client, packet) in queue.GetConsumingEnumerable())
-                    {
-                        if (specificClient == null || client == specificClient)
-                        {
-                            string message = ExtractMessageAfterPacketId(packet);
-                            callback(client, message);
-                        }
-                    }
-                });
+                return Result.Fail($"Failed to start listening: {ex.Message}");
             }
         }
 
-        public async Task SendMessage(TcpClient client, string? packetid, string message)
+        public async Task<Result> SendMessage(TcpClient client, string? packetid, string message)
         {
             if (client == null || !client.Connected)
-                throw new InvalidOperationException("Client is not connected.");
+                return Result.Fail("Client is not connected.");
 
-            NetworkStream stream = client.GetStream();
-            if (packetid != null) { message = $"{packetid}{separator}{message}"; }
-            byte[] data = Encoding.UTF8.GetBytes(message);
+            try
+            {
+                NetworkStream stream = client.GetStream();
+                if (packetid != null) { message = $"{packetid}{separator}{message}"; }
+                byte[] data = Encoding.UTF8.GetBytes(message);
 
-            await stream.WriteAsync(data, 0, data.Length);
+                await stream.WriteAsync(data, 0, data.Length);
+                return Result.Ok("Message sent successfully.");
+            }
+            catch (Exception ex)
+            {
+                return Result.Fail($"Failed to send message: {ex.Message}");
+            }
         }
 
         private async void HandleClient(TcpClient client)
@@ -125,7 +151,7 @@ namespace SharpNet
 
             try
             {
-                while (_isRunning && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                while (_isRunning && client.Connected && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                 {
                     string packetid = null;
                     bool isPacketIdFound = false;
@@ -135,7 +161,7 @@ namespace SharpNet
                         packetid = ExtractPacketId(buffer, bytesRead);
                         isPacketIdFound = true;
                     }
-                    catch (InvalidDataException){}
+                    catch (InvalidDataException) { }
 
                     if (isPacketIdFound && _listeners.TryGetValue(packetid, out var queue))
                     {
@@ -154,6 +180,14 @@ namespace SharpNet
                     }
                 }
             }
+            catch (IOException ioEx)
+            {
+                Console.WriteLine($"IOException: {ioEx.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Exception: {ex.Message}");
+            }
             finally
             {
                 client.TriggerDisconnect();
@@ -169,7 +203,7 @@ namespace SharpNet
 
             if (separatorIndex == -1)
             {
-                throw new InvalidDataException("separator not found.");
+                throw new InvalidDataException("Separator not found.");
             }
 
             string packetId = message.Substring(0, separatorIndex);
@@ -188,6 +222,29 @@ namespace SharpNet
             }
 
             return message.Substring(separatorIndex + 1);
+        }
+    }
+
+
+    public class Result
+    {
+        public bool Success { get; }
+        public string Message { get; }
+
+        public Result(bool success, string message)
+        {
+            Success = success;
+            Message = message;
+        }
+
+        public static Result Ok(string message = "successfully")
+        {
+            return new Result(true, message);
+        }
+
+        public static Result Fail(string message)
+        {
+            return new Result(false, message);
         }
     }
 }
