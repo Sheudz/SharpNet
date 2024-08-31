@@ -244,7 +244,7 @@ private static void ClientSpecificDisconnected(TcpClient client)
 Simple example
 ```
 var server = new SharpNet();
-var result = await server.StartServer(5555);
+Result result = await server.StartServer(5555);
 Console.WriteLine(result.Success);
 Console.WriteLine(result.Message);
 
