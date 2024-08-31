@@ -5,7 +5,7 @@ SharpNet is a C# library for working with TCP network connections. It provides a
 To install the SharpNet library, you need to use the .NET CLI to add it to your project. Use the following command to install the package:
 
 ```
-dotnet add package SharpNet --version 1.0.2
+dotnet add package SharpNet --version 1.0.3
 ```
 
 This command will add the SharpNet package to your project, allowing you to use its classes and methods in your application.
@@ -120,7 +120,13 @@ public class Program
 - **Description:** Starts the TCP server on the specified port.
 - **Arguments:**
   - `int port`: The port number on which the server should listen for incoming connections.
-- **Returns:** `void`
+- **Returns:** `Task<Result>: Returns a Result object indicating whether the server started successfully or if an error occurred.`
+- **Acceptable returns:**
+```
+{Result.Success=false, Result.Message="Server is already running."}
+{Result.Success=true, Result.Message="Server started successfully."}
+{Result.Success=false, Result.Message="Failed to start server: ex.Message"}
+```
 
 **Example**:
 ```
@@ -131,7 +137,13 @@ server.StartServer(port);
 
 - **Description:** Stops the TCP server and closes all active connections.
 - **Arguments:** None
-- **Returns:** `void`
+- **Returns:** `Task<Result>: Returns a Result object indicating whether the server started successfully or if an error occurred.`
+- **Acceptable returns:**
+```
+{Result.Success=false, Result.Message="Server is not running."}
+{Result.Success=true, Result.Message="Server stopped successfully."}
+{Result.Success=false, Result.Message="Failed to stop server: ex.Message"}
+```
 
 **Example**:
 ```
@@ -145,7 +157,12 @@ server.Stop();
   - `string packetid`: The identifier of the packet to listen for. null allowed
   - `TcpClient specificClient `: The identifier of the client to listen for. null allowed
   - `Action<TcpClient, string> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments. null allowed
-- **Returns:** `void`
+- **Returns:** `Task<Result>: Returns a Result object indicating whether the server started successfully or if an error occurred.
+- **Acceptable returns:**
+```
+{Result.Success=true, Result.Message="Listening for messages."}
+{Result.Success=false, Result.Message="Failed to start listening: ex.Message"}
+```
 
 **Example**:
 ```
@@ -163,7 +180,13 @@ server.Listen(packetid: "TESTREQUEST1337", specificClient: client, callback: asy
   - `TcpClient client`: The client to which the message will be sent.
   - `string packetId`: The identifier to prepend to the message. null allowed
   - `string message`: The message to be sent to the client.
-- **Returns:** `Task`: A `Task` representing the asynchronous operation. This method is asynchronous and returns a `Task` to indicate completion.
+- **Returns:** `Task<Result>: Returns a Result object indicating whether the server started successfully or if an error occurred.
+- **Acceptable returns:**
+```
+{Result.Success=false, Result.Message="Client is not connected."}
+{Result.Success=true, Result.Message="Message sent successfully."}
+{Result.Success=false, Result.Message="Failed to send message: ex.Message"}
+```
 
 **Example**:
 ```
@@ -215,4 +238,17 @@ private static void ClientSpecificDisconnected(TcpClient client)
     Console.WriteLine($"Client disconnected from server: {client}");
 }
 
+```
+
+# Result
+Simple example
+```
+var server = new SharpNet();
+var result = await server.StartServer(5555);
+Console.WriteLine(result.Success);
+Console.WriteLine(result.Message);
+
+result = server.StopServer();
+Console.WriteLine(result.Success);
+Console.WriteLine(result.Message);
 ```
