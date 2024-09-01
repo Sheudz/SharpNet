@@ -5,7 +5,7 @@ SharpNet is a C# library for working with TCP network connections. It provides a
 To install the SharpNet library, you need to use the .NET CLI to add it to your project. Use the following command to install the package:
 
 ```
-dotnet add package SharpNet --version 1.0.4
+dotnet add package SharpNet --version 1.0.5
 ```
 
 This command will add the SharpNet package to your project, allowing you to use its classes and methods in your application.
@@ -157,7 +157,12 @@ server.Stop();
   - `string packetid`: The identifier of the packet to listen for. null allowed
   - `TcpClient specificClient `: The identifier of the client to listen for. null allowed
   - `Action<TcpClient, string> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments. null allowed
-- **Returns:** ` ListenHandler
+- **Returns:** `Task<Result>: Returns a Result object indicating whether the server started successfully or if an error occurred.
+- **Acceptable returns:**
+```
+{Result.Success=true, Result.Message="Listening for messages."}
+{Result.Success=false, Result.Message="Failed to start listening: ex.Message"}
+```
 
 **Example**:
 ```
