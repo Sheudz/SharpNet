@@ -13,6 +13,7 @@ namespace SharpNet
         private readonly ConcurrentDictionary<string, BlockingCollection<(TcpClient client, byte[] packet)>> _listeners;
         private readonly ConcurrentBag<BlockingCollection<(TcpClient client, byte[] packet)>> _generalListeners;
         private readonly ConcurrentBag<TcpClient> _connectedClients;
+        private readonly ConcurrentDictionary<string, CancellationTokenSource> _listenerCancellationTokens;
         public char separator = '|';
 
         public delegate void ClientDisconnectedHandler(TcpClient client);
@@ -23,100 +24,89 @@ namespace SharpNet
             _listeners = new ConcurrentDictionary<string, BlockingCollection<(TcpClient, byte[])>>();
             _generalListeners = new ConcurrentBag<BlockingCollection<(TcpClient, byte[])>>();
             _connectedClients = new ConcurrentBag<TcpClient>();
+            _listenerCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
         }
 
-        public async Task<Result> StartServer(int port)
-        {
-            if (_isRunning)
-                return Result.Fail("Server is already running.");
-
-            try
-            {
-                _server = new TcpListener(IPAddress.Any, port);
-                _server.Start();
-                _isRunning = true;
-
-                while (_isRunning)
-                {
-                    var client = await _server.AcceptTcpClientAsync();
-                    _connectedClients.Add(client);
-                    HandleClient(client);
-                }
-
-                return Result.Ok("Server started successfully.");
-            }
-            catch (Exception ex)
-            {
-                return Result.Fail($"Failed to start server: {ex.Message}");
-            }
-        }
-
-        public Result StopServer()
-        {
-            if (!_isRunning)
-                return Result.Fail("Server is not running.");
-
-            try
-            {
-                _isRunning = false;
-                _server.Stop();
-
-                foreach (var client in _connectedClients)
-                {
-                    if (client.Connected)
-                    {
-                        client.Close();
-                    }
-                }
-
-                return Result.Ok("Server stopped successfully.");
-            }
-            catch (Exception ex)
-            {
-                return Result.Fail($"Failed to stop server: {ex.Message}");
-            }
-        }
-
-        public ListenerHandler Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
+        public Result Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
         {
             try
             {
-                BlockingCollection<(TcpClient, byte[])> queue;
+                var cancellationTokenSource = new CancellationTokenSource();
+                CancellationToken token = cancellationTokenSource.Token;
 
                 if (packetid == null)
                 {
-                    queue = new BlockingCollection<(TcpClient, byte[])>();
+                    var queue = new BlockingCollection<(TcpClient, byte[])>();
                     _generalListeners.Add(queue);
+
+                    Task.Run(() =>
+                    {
+                        foreach (var (client, packet) in queue.GetConsumingEnumerable(token))
+                        {
+                            if (specificClient == null || client == specificClient)
+                            {
+                                string message = Encoding.UTF8.GetString(packet);
+                                callback(client, message);
+                            }
+                        }
+                    }, token);
                 }
                 else
                 {
-                    queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
+                    var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
+                    _listenerCancellationTokens.TryAdd(packetid, cancellationTokenSource);
+
+                    Task.Run(() =>
+                    {
+                        foreach (var (client, packet) in queue.GetConsumingEnumerable(token))
+                        {
+                            if (specificClient == null || client == specificClient)
+                            {
+                                string message = ExtractMessageAfterPacketId(packet);
+                                callback(client, message);
+                            }
+                        }
+                    }, token);
                 }
 
-                var listenerTask = Task.Run(() =>
-                {
-                    foreach (var (client, packet) in queue.GetConsumingEnumerable())
-                    {
-                        if (specificClient == null || client == specificClient)
-                        {
-                            string message = packetid == null ?
-                                             Encoding.UTF8.GetString(packet) :
-                                             ExtractMessageAfterPacketId(packet);
-                            callback(client, message);
-                        }
-                    }
-                });
-
-                return new ListenerHandler(queue, listenerTask);
+                return Result.Ok("Listening for messages.");
             }
             catch (Exception ex)
             {
-                throw new Exception($"Failed to start listening: {ex.Message}");
+                return Result.Fail($"Failed to start listening: {ex.Message}");
             }
         }
 
+        public Result StopListening(string? packetid = null)
+        {
+            try
+            {
+                if (packetid == null)
+                {
+                    foreach (var tokenSource in _listenerCancellationTokens.Values)
+                    {
+                        tokenSource.Cancel();
+                    }
+                    _listenerCancellationTokens.Clear();
+                }
+                else if (_listenerCancellationTokens.TryRemove(packetid, out var tokenSource))
+                {
+                    tokenSource.Cancel();
+                }
+                else
+                {
+                    return Result.Fail("Listener not found.");
+                }
 
-        public async Task<Result> SendMessage(TcpClient client, string? packetid, string message)
+                return Result.Ok("Stopped listening.");
+            }
+            catch (Exception ex)
+            {
+                return Result.Fail($"Failed to stop listening: {ex.Message}");
+            }
+        }
+
+    public async Task<Result> SendMessage(TcpClient client, string? packetid, string message)
         {
             if (client == null || !client.Connected)
                 return Result.Fail("Client is not connected.");
