@@ -77,51 +77,44 @@ namespace SharpNet
             }
         }
 
-        public Result Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
+        public ListenerHandler Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
         {
             try
             {
+                BlockingCollection<(TcpClient, byte[])> queue;
+
                 if (packetid == null)
                 {
-                    var queue = new BlockingCollection<(TcpClient, byte[])>();
+                    queue = new BlockingCollection<(TcpClient, byte[])>();
                     _generalListeners.Add(queue);
-
-                    Task.Run(() =>
-                    {
-                        foreach (var (client, packet) in queue.GetConsumingEnumerable())
-                        {
-                            if (specificClient == null || client == specificClient)
-                            {
-                                string message = Encoding.UTF8.GetString(packet);
-                                callback(client, message);
-                            }
-                        }
-                    });
                 }
                 else
                 {
-                    var queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
-
-                    Task.Run(() =>
-                    {
-                        foreach (var (client, packet) in queue.GetConsumingEnumerable())
-                        {
-                            if (specificClient == null || client == specificClient)
-                            {
-                                string message = ExtractMessageAfterPacketId(packet);
-                                callback(client, message);
-                            }
-                        }
-                    });
+                    queue = _listeners.GetOrAdd(packetid, _ => new BlockingCollection<(TcpClient, byte[])>());
                 }
 
-                return Result.Ok("Listening for messages.");
+                var listenerTask = Task.Run(() =>
+                {
+                    foreach (var (client, packet) in queue.GetConsumingEnumerable())
+                    {
+                        if (specificClient == null || client == specificClient)
+                        {
+                            string message = packetid == null ?
+                                             Encoding.UTF8.GetString(packet) :
+                                             ExtractMessageAfterPacketId(packet);
+                            callback(client, message);
+                        }
+                    }
+                });
+
+                return new ListenerHandler(queue, listenerTask);
             }
             catch (Exception ex)
             {
-                return Result.Fail($"Failed to start listening: {ex.Message}");
+                throw new Exception($"Failed to start listening: {ex.Message}");
             }
         }
+
 
         public async Task<Result> SendMessage(TcpClient client, string? packetid, string message)
         {

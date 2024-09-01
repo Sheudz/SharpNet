@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 
@@ -38,4 +39,29 @@ namespace SharpNet.Extensions
             }
         }
     }
+    public class ListenerHandler
+    {
+        private readonly BlockingCollection<(TcpClient, byte[])> _queue;
+        private readonly Task _listenerTask;
+        private bool _isStopped;
+
+        public ListenerHandler(BlockingCollection<(TcpClient, byte[])> queue, Task listenerTask)
+        {
+            _queue = queue;
+            _listenerTask = listenerTask;
+        }
+
+        public void Stop()
+        {
+            if (!_isStopped)
+            {
+                _queue.CompleteAdding();
+                _listenerTask.Wait();
+                _isStopped = true;
+            }
+        }
+
+        public bool IsRunning => !_isStopped && !_queue.IsCompleted;
+    }
+
 }
