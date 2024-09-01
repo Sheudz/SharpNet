@@ -157,12 +157,7 @@ server.Stop();
   - `string packetid`: The identifier of the packet to listen for. null allowed
   - `TcpClient specificClient `: The identifier of the client to listen for. null allowed
   - `Action<TcpClient, string> callback`: A callback method that will be invoked when a message with the specified packet identifier is received. The callback receives the message and the `TcpClient` object as arguments. null allowed
-- **Returns:** `Task<Result>: Returns a Result object indicating whether the server started successfully or if an error occurred.
-- **Acceptable returns:**
-```
-{Result.Success=true, Result.Message="Listening for messages."}
-{Result.Success=false, Result.Message="Failed to start listening: ex.Message"}
-```
+- **Returns:** ` ListenHandler
 
 **Example**:
 ```
