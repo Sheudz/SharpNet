@@ -27,6 +27,58 @@ namespace SharpNet
             _listenerCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
         }
 
+        public async Task<Result> StartServer(int port)
+        {
+            if (_isRunning)
+                return Result.Fail("Server is already running.");
+
+            try
+            {
+                _server = new TcpListener(IPAddress.Any, port);
+                _server.Start();
+                _isRunning = true;
+
+                while (_isRunning)
+                {
+                    var client = await _server.AcceptTcpClientAsync();
+                    _connectedClients.Add(client);
+                    HandleClient(client);
+                }
+
+                return Result.Ok("Server started successfully.");
+            }
+            catch (Exception ex)
+            {
+                return Result.Fail($"Failed to start server: {ex.Message}");
+            }
+        }
+
+        public Result StopServer()
+        {
+            if (!_isRunning)
+                return Result.Fail("Server is not running.");
+
+            try
+            {
+                _isRunning = false;
+                _server.Stop();
+
+                foreach (var client in _connectedClients)
+                {
+                    if (client.Connected)
+                    {
+                        client.Close();
+                    }
+                }
+
+                return Result.Ok("Server stopped successfully.");
+            }
+            catch (Exception ex)
+            {
+                return Result.Fail($"Failed to stop server: {ex.Message}");
+            }
+        }
+
         public Result Listen(string? packetid = null, TcpClient? specificClient = null, Action<TcpClient, string> callback = null!)
         {
             try
